@@ -1,0 +1,1805 @@
+#!usr/bin/env python
+
+DEBUT(PAR_LOT='OUI');
+
+print "###########################################################################";
+print "##	Text based UI in order to prevent deadlocks caused by GUI's	##";
+print "##									##";
+print "##	Insert your selection concerning the available data strutures:	##";
+print "##	Type in X, Y, Z for the available coordinate columns.		##";
+print "##	And DX, DY and DZ for the available displacement fields.	##";
+print "##	Present this data in the order they are presented in the files.	##";
+print "##	Seperate the characters by a space...				##";
+print "##									##";
+print "##	Available options:						##";
+print "##	(1) X	(2) Y	(3) Z						##";
+print "##	(4) DX	(5) DY	(6) DZ						##";
+print "##	(7) DRX	(8) DRY	(9) DRZ						##";
+print "##	(10) Plan	(for a 2D model)				##";
+print "##	(11) 3D		(for a 3D model)				##";
+print "##	(12) COOR	(Print the COOR file)				##";
+print "##	(13) CONT	(Continue SIMUL → only select after second run)	##";
+print "##	(14) ST		(Simulation time → only select if applicable)	##";
+print "##	(T) THERM	(Thermal Simulation)				##";
+print "##	(E) EXPER	(Experimental Model Simulation)			##";
+print "###########################################################################";
+
+import math;
+import sys;
+import os;
+import vtk; #Import the VTK library
+import Tkinter;
+import threading;
+import time;
+
+from threading import Thread;
+from vtk import *;
+
+#In this function the user will be presented with a text based user interface for the selection of the available data structures
+
+#This script will allow the extraction of the temperature field 
+#from the list of data of the given displacements by the bromine experiments
+
+#Salome Meca libraries Location: /home/mcjssmac/salome_meca/V2015_1/modules/ASTER_20151/lib/python2.7/site-packages/salome
+
+# Filename: THERMALFIELD_PYTHON4.comm
+
+"""
+This python script will be implemented in the COMMAND file of the ThermalPy case.
+
+Launch the script by typing in: "as_run --quick THERMALFIELD_PYTHON4.comm Mesh_1.med"
+
+"""
+
+def create_coor():
+
+	#Read the mesh
+	MESH1=LIRE_MAILLAGE(FORMAT='MED', INFO=2,);
+
+	#In this function we will assign the value of the temperature to each individual node corresponding to the
+	#X and Y coordinates of each measurement point.
+		
+	"""
+		
+	If the code is being run for the first time with a new mesh then lines 1 and 2 should be executed
+		
+	"""		
+	#Obtain the X, Y coordinates of each node in the mesh
+	IMPR_RESU(FORMAT='RESULTAT', UNITE=25, RESU=_F(MAILLAGE=MESH1,),);
+
+
+
+def start():
+
+	global varX, varY, varZ, varDX, varDY, varDZ, varDRX, varDRY, varDRZ, varPlan, var3D;
+	global varContinue, simulation_time_given, simulation_time, varThermal, varExperimental;
+
+	#create a GUI that will ask the user is the program is being run for the first time with a new mesh, 
+	
+	print "Starting...";
+
+	varX = 0;
+	varY = 0;
+	varZ = 0;
+	varDX = 0;
+	varDY = 0;
+	varDZ = 0;
+	varDRX = 0;
+	varDRY = 0;
+	varDRZ = 0;
+	varPlan = 0;
+	var3D = 0;
+	varThermal = False;
+	varExperimental = False;
+	varContinue = False;
+	userInput = "";
+	counter = 0;
+	create_coor_file = False;
+	simulation_time_given = False;
+	simulation_time = 0;
+
+	#Obtain the user input and check which data fields are present
+	userInput = raw_input("Presented data>");
+	userInputArray = userInput.split();
+
+	while (counter < len(userInputArray)):
+		if userInputArray[counter] == "X" or userInputArray[counter] == "1":
+			varX = 1;
+		if userInputArray[counter] == "Y" or userInputArray[counter] == "2":
+			varY = 1;
+		if userInputArray[counter] == "Z" or userInputArray[counter] == "3":
+			varZ = 1;
+		if userInputArray[counter] == "DX" or userInputArray[counter] == "4":
+			varDX = 1;
+		if userInputArray[counter] == "DY" or userInputArray[counter] == "5":
+			varDY = 1;
+		if userInputArray[counter] == "DZ" or userInputArray[counter] == "6":
+			varDZ = 1;
+		if userInputArray[counter] == "DRX" or userInputArray[counter] == "7":
+			varDRX = 1;
+		if userInputArray[counter] == "DRY" or userInputArray[counter] == "8":
+			varDRY = 1;
+		if userInputArray[counter] == "DRZ" or userInputArray[counter] == "9":
+			varDRZ = 1;
+		if userInputArray[counter] == "Plan" or userInputArray[counter] == "10":
+			varPlan = 1;
+		if userInputArray[counter] == "3D" or userInputArray[counter] == "11":
+			var3D = 1;
+		if userInputArray[counter] == "COOR" or userInputArray[counter] == "12":
+			create_coor_file = True;
+		if userInputArray[counter] == "CONT" or userInputArray[counter] == "13":
+			varContinue = True;
+		if userInputArray[counter] == "ST" or userInputArray[counter] == "14":
+			simulation_time_given = True;
+			simulation_time = int(userInputArray[counter + 1]); #Assign the value of the given time to the global variable
+		if userInputArray[counter] == "THERM" or userInputArray[counter] == "T":
+			varThermal = True;
+		if userInputArray[counter] == "EXPER" or userInputArray[counter] == "E":
+			varExperimental = True;
+
+		counter += 1;
+
+	if (create_coor_file == True):
+		#Call the COOR creation file
+		create_coor();
+	else:
+		#Call the function to obtain the vector fields and node coordinates
+		get_file();	
+
+#End of the start function
+
+
+
+def get_file():
+
+	from tkFileDialog import askopenfilename;
+	from Tkinter import Tk;		
+
+	#Start a GUI to get the filename and path
+	mode = "read";
+	Tk().withdraw();
+
+	#Import the filename from the dialogbox
+	filename = askopenfilename();
+
+	#Pass the filename to the read_write function
+	read_write(filename, "read");
+
+
+#End of the get_file function
+
+
+
+def is_numeric(number):
+#This function will check if the presented value is a number of not
+	try:
+		float(number);
+		return True;
+
+	except ValueError:
+		pass;
+
+	return False;
+
+
+
+def read_write(filename, mode):
+
+	#Define a new array in order to hold all of the data of each line
+	data_line = [];
+	line = 0;
+	lineCheck = 0;
+	readingValues = 0; #This boolean variable is meant for the program to start counting the assignments of the values
+
+	assignCounterx = 0;
+	assignCountery = 0;
+	assignCounterz = 0;
+	assignCounterdx = 0;
+	assignCounterdy = 0;
+	assignCounterdz = 0;
+
+	#Split the data of each line into 5 different values
+	data_x_coor = [];
+	data_y_coor = [];
+	data_z_coor = [];
+
+	#Displacements
+	data_dx = [];
+	data_dy = [];
+	data_dz = [];
+
+	#Rotational Displacements
+	data_drx = [];
+	data_dry = [];
+	data_drz = [];
+		
+	if (mode == "read"):
+
+		source = file(filename, "r");
+			
+		#Create a loop to read all the lines of the files
+		while True:
+
+			columnCounter = 0; #This variable will keep track of the column number to read based on the selections made by the user
+
+			readlineValue = source.readline();
+				
+			if (len(readlineValue) == 0):
+				break;
+			
+			else:
+
+				#Depending on the choices made by the user, and the selection criteria the values of the X, Y, Z.
+				#And DX, DY and DZ arrays will be assigned 
+				data_line.append(readlineValue);
+					
+				#Assign the variables for each line to the arrays
+				#Split the string line along the spaces, 
+				#and store the values in a temporary array
+				split_data_array = data_line[lineCheck].split();
+
+				#List of if-then statements to check if the data are numerical values
+				#And also in order to sort the data in the correct arrays
+
+				if (varX == 1) and is_numeric(split_data_array[columnCounter]):
+					data_x_coor.append(split_data_array[columnCounter]);
+					print "Data_x: " + data_x_coor[assignCounterx];
+					readingValues = 1;
+					assignCounterx += 1;
+					columnCounter += 1;
+				if (varY == 1) and is_numeric(split_data_array[columnCounter]):
+					data_y_coor.append(split_data_array[columnCounter]);
+					print "Data_y: " + data_y_coor[assignCountery];
+					readingValues = 1;
+					assignCountery += 1;
+					columnCounter += 1;
+				if (varZ == 1) and is_numeric(split_data_array[columnCounter]):
+					data_z_coor.append(split_data_array[columnCounter]);
+					print "Data_z: " + data_z_coor[assignCounterz];
+					readingValues = 1;
+					assignCounterz += 1;
+					columnCounter += 1;
+
+				if (varDX == 1) and is_numeric(split_data_array[columnCounter]):
+					data_dx.append(split_data_array[columnCounter]);
+					print "Data_dx: " + data_dx[assignCounterdx];
+					readingValues = 1;
+					assignCounterdx += 1;
+					columnCounter += 1;				
+				if (varDY == 1) and is_numeric(split_data_array[columnCounter]):
+					data_dy.append(split_data_array[columnCounter]);
+					print "Data_dy: " + data_dy[assignCounterdy];
+					readingValues = 1;
+					assignCounterdy += 1;
+					columnCounter += 1;
+				if (varDZ == 1) and is_numeric(split_data_array[columnCounter]):
+					data_dz.append(split_data_array[columnCounter]);
+					print "Data_dz: " + data_dz[assignCounterdz];
+					readingValues = 1;
+					assignCounterdz += 1;
+					columnCounter += 1;
+
+				if (varDRX == 1) and is_numeric(split_data_array[columnCounter]):
+					data_drx.append(split_data_array[columnCounter]);
+					readingValues = 1;
+					columnCounter += 1;				
+				if (varDRY == 1) and is_numeric(split_data_array[columnCounter]):
+					data_dry.append(split_data_array[columnCounter]);
+					readingValues = 1;
+					columnCounter += 1;
+				if (varDRZ == 1) and is_numeric(split_data_array[columnCounter]):
+					data_drz.append(split_data_array[columnCounter]);
+					readingValues = 1;
+					columnCounter += 1;
+
+				#Reassign the counting variable to false 
+				#This in case some of the value in in the center of the file are non-numerical
+				#Count the number of lines 
+				if (readingValues == 1):
+					line += 1;
+					print "Line Print: " + repr(line);
+
+				lineCheck += 1;
+		
+		source.close();
+
+		#Send the arrays with the x, y and dx, dy and dz data 
+		#to the graphics rendering function
+		calculate_displacement_field(data_x_coor, data_y_coor, data_z_coor, data_dx, data_dy, data_dz, line, data_drx, data_dry, data_drz);
+
+	elif (mode == "write"):
+		
+		source = file(filename, "w");
+
+	#SLEEPING FUNCTION NOT IN USE AT THE MOMENT
+		
+#End of the read_write function
+
+
+
+def calculate_displacement_field(data_x_coor, data_y_coor, data_z_coor, data_dx, data_dy, data_dz, line, data_drx, data_dry, data_drz):
+
+	print "Starting calculate_displacement";
+
+	#Define the mathematical equations that will allow the calculation of the temperature field from the displacements
+	#	L = L0*(1 + alpha*dT)
+	#	dT = ((L/L0))/alpha
+	#	dA = A0*(2*alpha*dT)
+	#	(dx*dx)/(2*alpha) = dT
+	#In this case we will define a 2D expansion field in the form of an area expansion
+
+	#Graphite material properties
+	#alpha_max = 5.2*10**-6; #m/(m*K)
+
+	alpha_max = 0.6*10**-6; #m/(m*K)
+	alpha_min = 0.6*10**-6; #m/(m*K)
+	dt_max_tmp = 0;
+	dt_min_tmp = 0;
+	dx1 = 0;
+	dy1 = 0;
+	dz1 = 0;
+
+	drx1 = 0;
+	dry1 = 0;
+	drz1 = 0;
+
+	n = 0;
+	i = 0;
+
+	nu_max = 0.21;
+	nu_min = 0.17;
+	E_min = 4100000000.;
+	#E_max = 27600000000.;
+	E_max = 10000000000.;
+	lambda_min = 8.7;
+	lambda_max = 114;
+	rho_cp_min = 697;
+	rho_cp_max = 771;
+	dist_min = 0.05;
+	counter = 0;
+
+	#Determine the temperature difflerence array for the maximum and minimum values of the thermal expansion coefficients
+	#Change the implementation of the temperature calculation to calculate the temperature for the x and y displacement seperately.
+
+	dt_field_point_max_dx = [];
+	dt_field_point_max_dy = [];
+	dt_field_point_max_dz = [];
+	dt_field_point_min_dx = [];
+	dt_field_point_min_dy = [];
+	dt_field_point_min_dz = [];
+
+	dt_field_point_max_drx = [];
+	dt_field_point_max_dry = [];
+	dt_field_point_max_drz = [];
+	dt_field_point_min_drx = [];
+	dt_field_point_min_dry = [];
+	dt_field_point_min_drz = [];
+
+
+	while (n < line):
+
+		#Check each x, y, z array if they are empty
+		
+		if (varDX == 1):
+			dx1 = float(data_dx[n]);
+			dt_max_tmp_dx = ((dx1)/(alpha_max));
+			dt_field_point_max_dx.append(dt_max_tmp_dx);
+			dt_field_point_min_dx.append(dt_max_tmp_dx);
+
+		if (varDY == 1):
+			dy1 = float(data_dy[n]);
+			dt_max_tmp_dy = ((dy1)/(alpha_max));
+			dt_field_point_max_dy.append(dt_max_tmp_dy);
+			dt_field_point_min_dy.append(dt_max_tmp_dy);
+
+		if (varDZ == 1):
+			dz1 = float(data_dz[n]);
+			dt_max_tmp_dz = ((dz1)/(alpha_max));
+			dt_field_point_max_dz.append(dt_max_tmp_dz);
+			dt_field_point_min_dz.append(dt_max_tmp_dz);
+
+		if (varDRX == 1):
+			drx1 = float(data_dx[n]);
+			dt_max_tmp_drx = ((drx1)/(alpha_max));
+			dt_field_point_max_drx.append(dt_max_tmp_drx);
+			dt_field_point_min_drx.append(dt_max_tmp_drx);
+
+		if (varDRY == 1):
+			dry1 = float(data_dy[n]);
+			dt_max_tmp_dry = ((dry1)/(alpha_max));
+			dt_field_point_max_dry.append(dt_max_tmp_dry);
+			dt_field_point_min_dry.append(dt_max_tmp_dry);
+
+		if (varDRZ == 1):
+			drz1 = float(data_dz[n]);
+			dt_max_tmp_drz = ((drz1)/(alpha_max));
+			dt_field_point_max_drz.append(dt_max_tmp_drz);
+			dt_field_point_min_drz.append(dt_max_tmp_drz);
+
+		n += 1;
+	
+	#Get the file with all the node coordinates
+	from tkFileDialog import askopenfilename;
+	from Tkinter import Tk;		
+
+	#Start a GUI to get the filename and path
+	Tk().withdraw();
+
+	#Import the filename from the dialogbox
+	filename = askopenfilename();
+
+	#Call the Code_Aster calculation functions
+
+	code_aster_computation(data_x_coor, data_y_coor, data_z_coor, data_dx, data_dy, data_dz, line, dt_field_point_max_dx, 
+		dt_field_point_min_dx, dt_field_point_max_dy, dt_field_point_min_dy, dt_field_point_max_dz, dt_field_point_min_dz, 
+		filename, alpha_min, alpha_max, data_drx, data_dry, data_drz, dt_field_point_max_drx, dt_field_point_min_drx, 
+		dt_field_point_max_dry, dt_field_point_min_dry, dt_field_point_max_drz, dt_field_point_min_drz);
+
+#End of the calculate_displacement_field function
+
+
+
+def render_function(data_x_coor, data_y_coor, data_z_coor, data_dx, data_dy, data_dz, line):
+
+	print "Starting graphical rendering...";
+
+	from vtk import *;
+
+	#Create a flip-flop variable that allows the creation of a dx, dy and/or dz point after each field point
+	flipFlopVar = True;
+	counter = 0;
+
+	#Create two data points that will house the values of the arrays containing the x, y, z, dx, dy and dz data
+	coordinatePoint1 = 0.0;
+	coordinatePoint2 = 0.0;
+
+	coordinatePointDD1 = 0.0;
+	coordinatePointDD2 = 0.0;
+
+	#Create a rendering window
+	render = vtk.vtkRenderer();
+	render_min = vtk.vtkRenderer();
+
+	renderWindow = vtkRenderWindow();
+	renderWindowMin = vtkRenderWindow();
+
+	renderWindow.AddRenderer(render);
+	renderWindowMin.AddRenderer(render_min);
+
+	#Create a render window interactor
+	iren = vtk.vtkRenderWindowInteractor();
+	irenMin = vtk.vtkRenderWindowInteractor();
+
+	iren.SetRenderWindow(renderWindow);
+	irenMin.SetRenderWindow(renderWindowMin);
+
+	shadingFactor = 0.001; #This is a variable that allows for the manipulation of the maximal colorshading.
+	shadingFactor2 = 10.0;
+	
+	while (counter < line):
+
+		if (varX == 1 and varY == 1):
+			coordinatePoint1 = float(data_x_coor[counter]);
+			coordinatePoint2 = float(data_y_coor[counter]);
+
+			coordinatePointDD1 = float(data_x_coor[counter]) + float(data_dx[counter]);
+			coordinatePointDD2 = float(data_y_coor[counter]) + float(data_dy[counter]);
+
+		elif (varX == 1 and varZ == 1):
+
+			coordinatePoint1 = float(data_x_coor[counter]);
+			coordinatePoint2 = float(data_z_coor[counter]);
+
+			coordinatePointDD1 = float(data_x_coor[counter]) + float(data_dx[counter]);
+			coordinatePointDD2 = float(data_z_coor[counter]) + float(data_dz[counter]);
+
+		elif (varY == 1 and varZ == 1):
+
+			coordinatePoint1 = float(data_y_coor[counter]);
+			coordinatePoint2 = float(data_z_coor[counter]);
+
+			coordinatePointDD1 = float(data_dy[counter]);
+			coordinatePointDD2 = float(data_dz[counter]);
+		
+
+		#Create a source
+		if (flipFlopVar):
+			source = vtk.vtkSphereSource();
+			source.SetCenter(coordinatePoint1, coordinatePoint2, 0);
+			source.SetRadius(0.005);
+			flipFlopVar = False;
+
+		else:
+			source = vtk.vtkSphereSource();
+			source.SetCenter((coordinatePoint1 + coordinatePointDD1), (coordinatePoint2 + coordinatePointDD2), 0);
+			source.SetRadius(0.005);
+			flipFlopVar = True;
+
+			#Only increment the counter when the data_dx, data_dy points have been added
+			counter += 2;
+
+		#Initialize the mapper
+		mapper = vtk.vtkPolyDataMapper();
+
+		if vtk.VTK_MAJOR_VERSION <= 5:
+			mapper.SetInput(source.GetOutput());
+		else:
+			mapper.SetInputData(source.GetOutput());
+
+		#Create a loop in order to create and fill the actor array
+		actor_max = vtkActor();
+		actor_max.SetMapper(mapper);
+
+		actor_min = vtkActor();
+		actor_min.SetMapper(mapper);
+
+		colorMax1 = shadingFactor2*coordinatePoint1;
+		colorMax2 = shadingFactor2*coordinatePoint2;
+
+		colorMin1 = shadingFactor2*coordinatePoint1;
+		colorMin2 = shadingFactor2*coordinatePoint2;
+
+		actor_max.GetProperty().SetColor(0, 0, (colorMax1 + colorMax2));
+		actor_min.GetProperty().SetColor(0, 0, (colorMin1 + colorMin2));
+
+		#Send the actor to the renderer
+		render.AddActor(actor_max);
+		render_min.AddActor(actor_min);
+
+	#Start the rendering
+	print "Starting rendering...";
+
+	#Setup the environment variables of the renderer
+	iren.Initialize();
+	irenMin.Initialize();
+
+	render.SetBackground(255,255,255);
+	render_min.SetBackground(255,255,255);
+
+	renderWindow.Render();
+	renderWindowMin.Render();
+
+	renderWindow.SetWindowName("Rendering of the data file MAX Thermal Coefficient...");
+	renderWindowMin.SetWindowName("Rendering of the data file MIN Thermal Coefficient...");
+
+	iren.Start();
+	irenMin.Start();
+
+	#Close the renderer
+	del iren, renderWindow, irenMin, renderWindowMin;
+	
+#End of the render_function
+
+
+
+def find_center(nodes_x, nodes_y, nodes_z):
+
+	x_center = 0;
+	y_center = 0;
+	z_center = 0;
+
+	#This function will allow the program to find the center of the mesh
+	if (len(nodes_x) != 0):
+		x_min = min(nodes_x);
+		x_max = max(nodes_x);
+		x_center = ((float(x_max)-float(x_min))/2.);
+	if (len(nodes_y) != 0):
+		y_min = min(nodes_y);
+		y_max = max(nodes_y);
+		y_center = ((float(y_max)-float(y_min))/2.);
+	if (len(nodes_z) != 0):
+		z_min = min(nodes_z);
+		z_max = max(nodes_z);
+		z_center = ((float(z_max)-float(z_min))/2.);
+
+	return (x_center, y_center, z_center)
+
+
+
+def filter_nodes(nodes_x, nodes_y, nodes_z, node_dx, node_dy, node_dz, node_drx, node_dry, node_drz, nodeMeshCounter, filename, line):
+
+	#This function will filter all of the nodes that are located outside the circle of a specified radius
+	print "Starting node filtering..."
+
+	counter = 0;
+	filteredCounter = 0;
+
+	radiusTemp = [];
+	radius = 0;
+	outerRadius = 0;
+	innerRadius = 0;
+
+	filteredNode_x = [];
+	filteredNode_y = [];
+	filteredNode_z = [];
+
+	filteredData_x = [];
+	filteredData_y = [];
+	filteredData_z = [];
+
+	#Find the center of the mesh
+	x_center, y_center, z_center = find_center(nodes_x, nodes_y, nodes_z);
+
+	#Define the outer radius by finding the maximum value of (X_node**2+Y_node**2)**0.5
+	while (counter < nodeMeshCounter):
+
+		if (varX == 1) and (varY == 1):
+			width = (float(nodes_x[counter]) - x_center);
+			height = (float(nodes_y[counter]) - y_center);
+
+			radius = (width**2+height**2)**0.5;
+			radiusTemp.append(radius);
+
+		elif (varX == 1) and (varZ == 1):
+			width = (float(nodes_x[counter]) - x_center);
+			height = (float(nodes_z[counter]) - z_center);
+
+			radius = (width**2+height**2)**0.5;
+			radiusTemp.append(radius);
+
+		elif (varY == 1) and (varZ == 1):
+			width = (float(nodes_y[counter]) - y_center);
+			height = (float(nodes_z[counter]) - z_center);
+
+			radius = (width**2+height**2)**0.5;
+			radiusTemp.append(radius);
+
+		counter += 1 ;
+	
+	outerRadius = max(radiusTemp);
+	innerRadius = min(radiusTemp);
+
+	#Reset the counter
+	counter = 0;
+	
+	#Calculate the arm lenght between each point and the center point, 
+	#if this arm length is larger than the radius the point will not be taken into the main array.
+	while (counter < nodeMeshCounter):
+
+		if (varX == 1) and (varY == 1):
+			width = float(nodes_x[counter]) - x_center;
+			height = float(nodes_y[counter]) - y_center;
+			armLength = (width**2 + height**2)**0.5;
+
+		elif (varX == 1) and (varZ == 1):
+			width = float(nodes_x[counter]) - x_center;
+			height = float(nodes_z[counter]) - z_center;
+			armLength = (width**2 + height**2)**0.5;
+
+		elif (varY == 1) and (varZ == 1):
+			width = float(nodes_y[counter]) - y_center;
+			height = float(nodes_z[counter]) - z_center;
+			armLength = (width**2 + height**2)**0.5;
+
+		if ((armLength < outerRadius) and (armLength > innerRadius)):
+
+			if (len(nodes_x) != 0):
+				filteredNode_x.append(float(nodes_x[counter])/5.0);
+			if (len(nodes_y) != 0):
+				filteredNode_y.append(float(nodes_y[counter])/5.0);
+			if (len(nodes_z) != 0):
+				filteredNode_y.append(float(nodes_z[counter])/5.0);
+
+			if (len(node_dx) != 0):
+				filteredData_x.append(float(node_dx[counter])/5.0);
+			if (len(node_dy) != 0):
+				filteredData_y.append(float(node_dy[counter])/5.0);
+			if (len(node_dz) != 0):
+				filteredData_y.append(float(node_dz[counter])/5.0);
+
+			filteredCounter += 1;
+
+		counter += 1;
+
+	#Call the rendering function and pass the filtered nodes to the function
+	render_function(filteredNode_x, filteredNode_y, filteredNode_z, filteredData_x, filteredData_y, filteredData_z, filteredCounter);
+
+
+
+def get_node_coordinates(line, filename):
+
+	coordinatesFile = open(filename, "r");
+
+	#Define the empty arrays that will hold the node information
+	nodename = [];
+	nodes_x = [];
+	nodes_y = [];
+	nodes_z = []
+	nodeMeshCounter = 0;
+	columnCounter = 0;
+
+	startReading = 0; #This variable tells the conditional statements in the loop if one should start reading the loop or not.
+
+	#Create the loop to read the file starting after the line containing "COOR_2D"
+	while True:
+
+		readLinevalue = coordinatesFile.readline();
+	
+		if (startReading == 1):
+
+			if (readLinevalue.count('FINSF') >= 1): #When the end of the nodes list is reached, the loop should be broken.
+				break;
+
+			else:		
+				arrayData = readLinevalue.split();
+				nodename.append(arrayData[columnCounter]);
+				columnCounter += 1;
+
+				if (varX == 1):
+					try:
+						nodes_x.append(float(arrayData[columnCounter]));
+					except IndexError:
+						nodes_x.append(0.0);
+					columnCounter += 1;
+
+				if (varY == 1):
+					try:
+						nodes_y.append(float(arrayData[columnCounter]));
+					except IndexError:
+						nodes_y.append(0.0);
+					columnCounter += 1;
+
+				if (varZ == 1):
+					try:
+						nodes_z.append(float(arrayData[columnCounter]));
+					except IndexError:
+						nodes_z.append(0.0);
+					columnCounter += 1;
+
+				nodeMeshCounter = nodeMeshCounter + 1;
+				columnCounter = 0;
+		#Count the number of occurences of the keywords COOR_2D or COOR_3D
+		if ((readLinevalue.count('COOR_2D') >= 1) or (readLinevalue.count('COOR_3D') >= 1)): 
+
+
+			startReading = 1;
+
+			print "Start reading.......................................";
+
+	coordinatesFile.close();
+
+	return (nodename, nodes_x, nodes_y, nodes_z, nodeMeshCounter);
+
+#End of the get_node_coordinates function
+
+
+
+#######################################################START OF THE CODE_ASTER CALCULATION###################################################################
+#############################################################################################################################################################
+
+
+
+def code_aster_computation(data_x_coor, data_y_coor, data_z_coor, data_dx, data_dy, data_dz, line, dt_field_point_max_dx, 
+	dt_field_point_min_dx, dt_field_point_max_dy, dt_field_point_min_dy, dt_field_point_max_dz, dt_field_point_min_dz, 
+	filename, alpha_min, alpha_max, data_drx, data_dry, data_drz, dt_field_point_max_drx, dt_field_point_min_drx, 
+	dt_field_point_max_dry, dt_field_point_min_dry, dt_field_point_max_drz, dt_field_point_min_drz):
+	#This function has the purpose of calculating the stresses caused by the simulated temperature/bromination calculation
+
+	print "Starting Code_Aster calculation...";
+
+	from Utilitai import partition;
+	
+	T0 = 20;
+
+	nu_max = 0.21;
+	nu_min = 0.17;
+
+	E_min = 4100000000.;
+	#E_max = 27600000000.;
+	E_max = 10000000000.;
+	
+	lambda_min = 8.7;
+	lambda_max = 0.0000001;
+	
+	rho_cp_min = 697;
+	rho_cp_max = 1.0;
+
+	dist_min = 0.1;
+
+	dx1 = 0;
+	dy1 = 0;
+	dz1 = 0;
+
+	node = 1;
+	measurementPointCounter = 0;
+	mPC = 0;
+	distCalc = 0;
+
+	i = 0;
+	j = 0;
+
+	dt_min_real_dx = [0]*line; #This will become the real minimum temperature of the node
+	dt_max_real_dx = [0]*line; #This will become the real maximum temperature of the node
+	dt_temp_min_dx = [0]*line;
+	dt_temp_max_dx = [0]*line;
+
+	dt_min_real_dy = [0]*line; #This will become the real minimum temperature of the node
+	dt_max_real_dy = [0]*line; #This will become the real maximum temperature of the node
+	dt_temp_min_dy = [0]*line;
+	dt_temp_max_dy = [0]*line;
+
+	dt_min_real_dz = [0]*line; #This will become the real minimum temperature of the node
+	dt_max_real_dz = [0]*line; #This will become the real maximum temperature of the node
+	dt_temp_min_dz = [0]*line;
+	dt_temp_max_dz = [0]*line;
+
+	dt_min_real_drx = [0]*line; #This will become the real minimum temperature of the node
+	dt_max_real_drx = [0]*line; #This will become the real maximum temperature of the node
+	dt_temp_min_drx = [0]*line;
+	dt_temp_max_drx = [0]*line;
+
+	dt_min_real_dry = [0]*line; #The rotational displacement equivalent
+	dt_max_real_dry = [0]*line; 
+	dt_temp_min_dry = [0]*line;
+	dt_temp_max_dry = [0]*line;
+
+	dt_min_real_drz = [0]*line; 
+	dt_max_real_drz = [0]*line; 
+	dt_temp_min_drz = [0]*line;
+	dt_temp_max_drz = [0]*line;
+	
+	dt_temp_max_assign_dx = 0;
+	dt_temp_min_assign_dx = 0;
+
+	dt_temp_max_assign_dy = 0;
+	dt_temp_min_assign_dy = 0;
+
+	dt_temp_max_assign_dz = 0;
+	dt_temp_min_assign_dz = 0;
+
+	dt_temp_max_assign_drx = 0;
+	dt_temp_min_assign_drx = 0;
+
+	dt_temp_max_assign_dry = 0;
+	dt_temp_min_assign_dry = 0;
+
+	dt_temp_max_assign_drz = 0;
+	dt_temp_min_assign_drz = 0;
+	
+	nodeCounter = 0;
+	counter = 1; #Loopcounter variable
+	
+	dt_temperature_final = [];
+	modelType = "";
+	nodes = [];
+
+	#Call the function that will extract the X, Y coordinates from the newly created results file.
+	nodename, nodes_x, nodes_y, nodes_z, nodeMeshCounter = get_node_coordinates(line, filename); #Node n = N(n - 1)
+
+	#This loop will create the node names as NX:
+	while (counter <= (nodeMeshCounter)):
+	
+		nodeName = "N" + repr(counter);
+		nodes.append(nodeName);
+		
+		counter = counter + 1;
+	
+	"""
+	Change the mesh size
+	Use a coarser mesh
+	X Display the results in a different method
+
+	"""
+
+	#Determine the type of model to be computed
+	if (varPlan == 1):
+		modelType = 'PLAN';
+		modelTypeCPLAN = 'C_PLAN';
+	elif (var3D == 1):
+		modelType = '3D';
+		modelTypeCPLAN = '3D';
+
+	#Read the mesh
+	MESH1=LIRE_MAILLAGE(FORMAT='MED', INFO=2,);
+
+	#Define the material characteristics
+	MAT1=DEFI_MATERIAU(ELAS=_F(E=E_max, NU=nu_max, ALPHA=alpha_max,), THER=_F(LAMBDA=lambda_max, RHO_CP=rho_cp_max,),);
+
+	#Define the thermal loadings for each node, from 1 to 4000
+	APPLYMAT=AFFE_MATERIAU(MAILLAGE=MESH1, AFFE=_F(TOUT='OUI', MATER=MAT1,),AFFE_VARC=_F(TOUT='OUI', 
+					NOM_VARC='TEMP', VALE_REF=20.,),);
+
+	#Define the thermal model
+	MOD1=AFFE_MODELE(MAILLAGE=MESH1, AFFE=_F(TOUT='OUI', PHENOMENE='THERMIQUE', MODELISATION=modelType,),);
+
+	#Search for the 4 closest points to that node, and take an average of the measured temperature
+	for node in range(nodeMeshCounter - 1):
+		
+		#Take the 4 nearest measurement points that are the closest to a node
+
+		while (mPC < line):
+
+			if (varX == 1):
+				dx1 = math.fabs((float(nodes_x[node])-float(data_x_coor[mPC])));
+
+			if (varY == 1):			
+				dy1 = math.fabs((float(nodes_y[node])-float(data_y_coor[mPC])));
+
+			if (varZ == 1):			
+				dz1 = math.fabs((float(nodes_z[node])-float(data_z_coor[mPC])));
+
+			if ((varDX == 1) and varDY == 1 and varDZ == 0):
+
+				if ((dx1 <= dist_min) and (dy1 <= dist_min)):
+
+					dt_temp_min_dx[measurementPointCounter] = dt_field_point_min_dx[mPC]; 
+					dt_temp_max_dx[measurementPointCounter] = dt_field_point_max_dx[mPC];
+
+					dt_temp_min_dy[measurementPointCounter] = dt_field_point_min_dy[mPC]; 
+					dt_temp_max_dy[measurementPointCounter] = dt_field_point_max_dy[mPC];
+
+					measurementPointCounter += 1;
+
+			elif ((varDX == 1) and varDY == 1 and varDZ == 1):
+
+				if ((dx1 <= dist_min) and (dy1 <= dist_min) and (dz1 <= dist_min)):
+
+					dt_temp_min_dx[measurementPointCounter] = dt_field_point_min_dx[mPC]; 
+					dt_temp_max_dx[measurementPointCounter] = dt_field_point_max_dx[mPC];
+
+					dt_temp_min_dy[measurementPointCounter] = dt_field_point_min_dy[mPC]; 
+					dt_temp_max_dy[measurementPointCounter] = dt_field_point_max_dy[mPC];
+
+					dt_temp_min_dz[measurementPointCounter] = dt_field_point_min_dz[mPC]; 
+					dt_temp_max_dz[measurementPointCounter] = dt_field_point_max_dz[mPC]; 
+
+					measurementPointCounter += 1;
+
+			elif ((varDX == 1) and varDY == 0 and varDZ == 1):
+
+				if ((dx1 <= dist_min) and (dz1 <= dist_min)):
+
+					dt_temp_min_dx[measurementPointCounter] = dt_field_point_min_dx[mPC]; 
+					dt_temp_max_dx[measurementPointCounter] = dt_field_point_max_dx[mPC];
+
+					dt_temp_min_dz[measurementPointCounter] = dt_field_point_min_dz[mPC]; 
+					dt_temp_max_dz[measurementPointCounter] = dt_field_point_max_dz[mPC]; 
+
+					measurementPointCounter += 1;
+
+			elif ((varDX == 0) and varDY == 1 and varDZ == 1):
+
+				if ((dy1 <= dist_min) and (dz1 <= dist_min)):
+
+					dt_temp_min_dy[measurementPointCounter] = dt_field_point_min_dy[mPC]; 
+					dt_temp_max_dy[measurementPointCounter] = dt_field_point_max_dy[mPC];
+
+					dt_temp_min_dz[measurementPointCounter] = dt_field_point_min_dz[mPC]; 
+					dt_temp_max_dz[measurementPointCounter] = dt_field_point_max_dz[mPC]; 
+
+					measurementPointCounter += 1;
+
+			if ((varDRX == 1) and varDRY == 1 and varDZ == 0):
+
+				if ((dx1 <= dist_min) and (dy1 <= dist_min)):
+
+					dt_temp_min_dx[measurementPointCounter] = dt_field_point_min_dx[mPC]; 
+					dt_temp_max_dx[measurementPointCounter] = dt_field_point_max_dx[mPC];
+
+					dt_temp_min_dy[measurementPointCounter] = dt_field_point_min_dy[mPC]; 
+					dt_temp_max_dy[measurementPointCounter] = dt_field_point_max_dy[mPC];
+
+					measurementPointCounter += 1;
+
+			elif ((varDRX == 1) and varDRY == 1 and varDRZ == 1):
+
+				if ((dx1 <= dist_min) and (dy1 <= dist_min) and (dz1 <= dist_min)):
+
+					dt_temp_min_drx[measurementPointCounter] = dt_field_point_min_drx[mPC]; 
+					dt_temp_max_drx[measurementPointCounter] = dt_field_point_max_drx[mPC];
+
+					dt_temp_min_dry[measurementPointCounter] = dt_field_point_min_dry[mPC]; 
+					dt_temp_max_dry[measurementPointCounter] = dt_field_point_max_dry[mPC];
+
+					dt_temp_min_drz[measurementPointCounter] = dt_field_point_min_drz[mPC]; 
+					dt_temp_max_drz[measurementPointCounter] = dt_field_point_max_drz[mPC]; 
+
+					measurementPointCounter += 1;
+
+			elif ((varDRX == 1) and varDRY == 0 and varDRZ == 1):
+
+				if ((dx1 <= dist_min) and (dz1 <= dist_min)):
+
+					dt_temp_min_drx[measurementPointCounter] = dt_field_point_min_drx[mPC]; 
+					dt_temp_max_drx[measurementPointCounter] = dt_field_point_max_drx[mPC];
+
+					dt_temp_min_drz[measurementPointCounter] = dt_field_point_min_drz[mPC]; 
+					dt_temp_max_drz[measurementPointCounter] = dt_field_point_max_drz[mPC]; 
+
+					measurementPointCounter += 1;
+
+			elif ((varDRX == 0) and varDRY == 1 and varDRZ == 1):
+
+				if ((dy1 <= dist_min) and (dz1 <= dist_min)):
+
+					dt_temp_min_dry[measurementPointCounter] = dt_field_point_min_dry[mPC]; 
+					dt_temp_max_dry[measurementPointCounter] = dt_field_point_max_dry[mPC];
+
+					dt_temp_min_drz[measurementPointCounter] = dt_field_point_min_drz[mPC]; 
+					dt_temp_max_drz[measurementPointCounter] = dt_field_point_max_drz[mPC]; 
+
+					measurementPointCounter += 1;
+		
+			mPC = mPC + 1;
+
+		print "Node: " + repr(node);
+
+		#After the temperature assigments, the program will then calculate the average temperature for the node in question
+		while (j < (measurementPointCounter - 1)):
+
+			if (varDX == 1):
+				dt_temp_max_assign_dx = dt_temp_max_assign_dx + dt_temp_max_dx[j];
+				dt_temp_min_assign_dx = dt_temp_min_assign_dx + dt_temp_min_dx[j];
+
+			if (varDY == 1):
+				dt_temp_max_assign_dy = dt_temp_max_assign_dy + dt_temp_max_dy[j];
+				dt_temp_min_assign_dy = dt_temp_min_assign_dy + dt_temp_min_dy[j];
+
+			if (varDZ == 1):
+				dt_temp_max_assign_dz = dt_temp_max_assign_dz + dt_temp_max_dz[j];
+				dt_temp_min_assign_dz = dt_temp_min_assign_dz + dt_temp_min_dz[j];
+
+			if (varDRX == 1):
+				dt_temp_max_assign_drx = dt_temp_max_assign_drx + dt_temp_max_drx[j];
+				dt_temp_min_assign_drx = dt_temp_min_assign_drx + dt_temp_min_drx[j];
+
+			if (varDRY == 1):
+				dt_temp_max_assign_dry = dt_temp_max_assign_dry + dt_temp_max_dry[j];
+				dt_temp_min_assign_dry = dt_temp_min_assign_dry + dt_temp_min_dry[j];
+
+			if (varDRZ == 1):
+				dt_temp_max_assign_drz = dt_temp_max_assign_drz + dt_temp_max_drz[j];
+				dt_temp_min_assign_drz = dt_temp_min_assign_drz + dt_temp_min_drz[j];
+
+			j += 1;
+
+		#If the computation of (measurementPointCounter - 1) = 0, then the result will equal to 0.
+		#This in order to avoid division by 0;
+		if ((measurementPointCounter) <= 0):
+			dt_min_real_dx.append(0);
+			dt_max_real_dx.append(0);
+
+			dt_min_real_dy.append(0);
+			dt_max_real_dy.append(0);
+
+			dt_min_real_dz.append(0);
+			dt_max_real_dz.append(0);
+
+			dt_min_real_drx.append(0);
+			dt_max_real_drx.append(0);
+
+			dt_min_real_dry.append(0);
+			dt_max_real_dry.append(0);
+
+			dt_min_real_drz.append(0);
+			dt_max_real_drz.append(0);
+
+		else:
+			if (varDX == 1):
+				dt_min_real_dx[node] = ((dt_temp_min_assign_dx)/(measurementPointCounter));
+				dt_max_real_dx[node] = ((dt_temp_max_assign_dx)/(measurementPointCounter));
+				print "dx real ->" + repr(dt_max_real_dx[node]);
+
+			if (varDY == 1):
+				dt_min_real_dy[node] = ((dt_temp_min_assign_dy)/(measurementPointCounter));
+				dt_max_real_dy[node] = ((dt_temp_max_assign_dy)/(measurementPointCounter));
+				print "dy real ->" + repr(dt_max_real_dy[node]);
+
+			if (varDZ == 1):
+				dt_min_real_dz[node] = ((dt_temp_min_assign_dz)/(measurementPointCounter));
+				dt_max_real_dz[node] = ((dt_temp_max_assign_dz)/(measurementPointCounter));
+				print "dz real ->" + repr(dt_max_real_dz[node]);
+
+			if (varDRX == 1):
+				dt_min_real_drx[node] = ((dt_temp_min_assign_drx)/(measurementPointCounter));
+				dt_max_real_drx[node] = ((dt_temp_max_assign_drx)/(measurementPointCounter));
+				print "dx real ->" + repr(dt_max_real_drx[node]);
+
+			if (varDRY == 1):
+				dt_min_real_dry[node] = ((dt_temp_min_assign_dry)/(measurementPointCounter));
+				dt_max_real_dry[node] = ((dt_temp_max_assign_dry)/(measurementPointCounter));
+				print "dy real ->" + repr(dt_max_real_dry[node]);
+
+			if (varDRZ == 1):
+				dt_min_real_drz[node] = ((dt_temp_min_assign_drz)/(measurementPointCounter));
+				dt_max_real_drz[node] = ((dt_temp_max_assign_drz)/(measurementPointCounter));
+				print "dz real ->" + repr(dt_max_real_drz[node]);
+
+		#Reset the sub-loop counters
+		mPC = 0;
+		measurementPointCounter = 1;
+		j = 0;
+		
+		dt_temp_max_assign_dx = 0;
+		dt_temp_min_assign_dx = 0;
+
+		dt_temp_max_assign_dy = 0;
+		dt_temp_min_assign_dy = 0;
+
+		dt_temp_max_assign_dz = 0;
+		dt_temp_min_assign_dz = 0;
+
+		dt_temp_max_assign_drx = 0;
+		dt_temp_min_assign_drx = 0;
+
+		dt_temp_max_assign_dry = 0;
+		dt_temp_min_assign_dry = 0;
+
+		dt_temp_max_assign_drz = 0;
+		dt_temp_min_assign_drz = 0;
+
+	#End of the node loop
+
+	#Create a loop that will assign a temperature to each of the 4000+ nodes
+	print "Starting TEMPLOAD calculation";
+
+	TEMPLOAD_STRING1 = "TEMPLOAD = AFFE_CHAR_THER(MODELE=MOD1, TEMP_IMPO=(";
+	TEMPLOAD_STRING2 = "";
+	TEMPLOAD_STRING3 = "),);";
+
+	counter = 0;
+
+	print "LINE: " + repr(line);
+	print "NodeMeshCounter: " + repr(nodeMeshCounter);
+
+	#This loop will cause the 2 values of the x and y temperatures to be co-joined in a single array
+	while (counter <= (nodeMeshCounter - 10)):
+
+		assignedTempValues = 0;
+		temperatureCounter = 0;
+		
+		if (varDX == 1):
+			assignedTempValues = assignedTempValues + dt_max_real_dx[counter];
+			temperatureCounter += 1;
+		if (varDY == 1):
+			assignedTempValues = assignedTempValues + dt_max_real_dy[counter];
+			temperatureCounter += 1;
+		if (varDZ == 1):
+			assignedTempValues = assignedTempValues + dt_max_real_dz[counter];
+			temperatureCounter += 1;
+		if (varDRX == 1):
+			assignedTempValues = assignedTempValues + dt_max_real_drx[counter];
+			temperatureCounter += 1;
+		if (varDRY == 1):
+			assignedTempValues = assignedTempValues + dt_max_real_dry[counter];
+			temperatureCounter += 1;
+		if (varDRZ == 1):
+			assignedTempValues = assignedTempValues + dt_max_real_drz[counter];
+			temperatureCounter += 1;
+
+		dt_temperature_final.append((assignedTempValues)/temperatureCounter);
+
+		counter += 1;
+
+	counter = 0;
+	
+	while (counter <= (nodeMeshCounter - 10)):
+
+		TEMPLOAD_STRING2 = TEMPLOAD_STRING2 + "_F(NOEUD=nodes[" + repr(counter) + "], TEMP=dt_temperature_final[" + repr(counter) + "],),";
+		
+		counter += 1;
+	
+	TEMPLOAD_STRING4 = TEMPLOAD_STRING1 + TEMPLOAD_STRING2 + TEMPLOAD_STRING3;
+	
+	print "Executing TEMPLOAD_STRING";
+	
+	exec TEMPLOAD_STRING4;
+
+	#Build the static thermal model
+	TRES=THER_LINEAIRE(MODELE=MOD1, CHAM_MATER=APPLYMAT, EXCIT=_F(CHARGE=TEMPLOAD,),);
+
+	#Destroy the previous load model
+	DETRUIRE (CONCEPT = _F (NOM = (TEMPLOAD,),),);
+
+	#At the end of the thermal model computation we will call the functions that will calculate the stresses in the experimental model
+	get_stress_from_depl(data_x_coor, data_y_coor, data_z_coor, data_dx, data_dy, data_dz, line, MESH1, MOD1, MAT1, 
+					nodes, node, filename, dist_min, alpha_min, alpha_max, E_min, E_max, 
+					nu_min, nu_max, lambda_min, lambda_max, rho_cp_min, rho_cp_max, 
+					dt_field_point_max_dx, dt_field_point_min_dx, dt_field_point_max_dy,
+					dt_field_point_min_dy, dt_field_point_max_dz, dt_field_point_min_dz, 
+					nodeMeshCounter, data_drx, data_dry, data_drz, APPLYMAT, TRES, modelTypeCPLAN);
+#End of the code_aster_computation function
+
+
+
+def get_stress_from_depl(data_x_coor, data_y_coor, data_z_coor, data_dx, data_dy, data_dz, line, 
+			MESH1, MOD1, MAT1, nodes, node, filename, dist_min, alpha_min, alpha_max, E_min, E_max, nu_min, nu_max, 
+			lambda_min, lambda_max, rho_cp_min, rho_cp_max, dt_field_point_max_dx, dt_field_point_min_dx,
+			dt_field_point_max_dy, dt_field_point_min_dy, dt_field_point_max_dz, 
+			dt_field_point_min_dz, nodeMeshCounter, data_drx, data_dry, data_drz, APPLYMAT, TRES, modelTypeCPLAN):
+			#This function represents the start of the mechanical analysis of the thermal model
+
+	print "Starting get_stress_from_depl...";
+
+	#Create a new mesh
+	MESH2 = LIRE_MAILLAGE(FORMAT='MED', INFO=2,);
+
+	print "SIM TIME: " + repr(simulation_time);
+
+	L_INST1 = None;
+	LIS_ARCH = None;
+	LINST = None;
+	FUNCT2 = None;
+
+	#In order to prevent runtime errors we only construct the instance objects if the simulation time has been given
+	if (simulation_time_given):
+		L_INST1 = DEFI_LIST_REEL(DEBUT=0.0, INTERVALLE=_F(JUSQU_A=simulation_time, NOMBRE=simulation_time));
+		LIS_ARCH = DEFI_LIST_REEL(DEBUT=0.0, INTERVALLE=_F(JUSQU_A=simulation_time, NOMBRE=simulation_time));
+		LINST = DEFI_LIST_INST(DEFI_LIST=_F(METHODE='MANUEL', LIST_INST=L_INST1), ECHEC=_F(ACTION='DECOUPE', SUBD_METHODE='MANUEL', SUBD_NIVEAU=10));
+		FUNCT2 = DEFI_FONCTION(NOM_PARA = 'INST', VALE=(0.0, 0.0 ,simulation_time, simulation_time),);
+
+	#Continue the computation when all displacement fields are known
+	if (varContinue == True):
+		#Call the thermal simulation model
+		if (varThermal):
+			Thread(target=get_stress_from_depl_cont(data_x_coor, data_y_coor, data_z_coor, data_dx, data_dy, data_dz, line, 
+				filename, dist_min, nodes, alpha_min, alpha_max, E_min, E_max, nu_min, nu_max, 
+				lambda_min, lambda_max, rho_cp_min, rho_cp_max, data_drx, data_dry, data_drz, 
+				nodeMeshCounter, MESH2, L_INST1, LIS_ARCH, LINST, FUNCT2, modelTypeCPLAN)).start();
+
+		#Call the experimental simulation model
+		elif (varExperimental):
+			Thread(target=experimental_model(data_x_coor, data_y_coor, data_z_coor, data_dx, data_dy, data_dz, line, 
+				filename, dist_min, nodes, alpha_min, alpha_max, E_min, E_max, nu_min, nu_max, 
+				lambda_min, lambda_max, rho_cp_min, rho_cp_max, data_drx, data_dry, data_drz,
+				L_INST1, LIS_ARCH, LINST, FUNCT2, modelTypeCPLAN)).start();
+	else:
+		#Define the mechanical model
+		MOD2=AFFE_MODELE(MAILLAGE=MESH2, AFFE=_F(TOUT='OUI', PHENOMENE='MECANIQUE', MODELISATION=modelTypeCPLAN,),);
+	
+		#Project the thermal field onto the mechanical model
+		TEMFIELD=PROJ_CHAMP(RESULTAT=TRES, MODELE_1=MOD1, MODELE_2=MOD2,);
+	
+		#Apply the material properties and thermal field onto the mechanical model
+		APPLYMA2=AFFE_MATERIAU(MAILLAGE=MESH2, AFFE=_F(TOUT='OUI', MATER=MAT1,),AFFE_VARC=_F(TOUT='OUI', 
+						NOM_VARC='TEMP', EVOL=TEMFIELD, NOM_CHAM='TEMP', VALE_REF=20.,),);
+
+		AFM_STRING1 = "FIX1=AFFE_CHAR_MECA(MODELE=MOD2, DDL_IMPO=(";
+		AFM_STRING2 = "";
+		AFM_STRING3 = "),);";
+
+		DX_STRING = "";
+		DY_STRING = "";
+		DZ_STRING = "";
+
+		DRX_STRING = "";
+		DRY_STRING = "";
+		DRZ_STRING = "";
+
+		counter = 1;
+
+		#The second loop will cause the formation of the AFFE_CHAR_MECA string with the imposed displacements
+		while (counter < (2)):
+
+			if (varDX == 1):
+				DX_STRING = ", DX=0.0";
+			if (varDY == 1):
+				DY_STRING = ", DY=0.0";
+			if (varDZ == 1):
+				DZ_STRING = ", DZ=0.0";
+
+			if (varDRX == 1):
+				DRX_STRING = ", DRX=0.0";
+			if (varDRY == 1):
+				DRY_STRING = ", DRY=0.0";
+			if (varDRZ == 1):
+				DRZ_STRING = ", DRZ=0.0";
+
+			AFM_STRING2 = AFM_STRING2 + "_F(NOEUD=nodes[" + repr(counter) + "]" + (DX_STRING + DY_STRING + DZ_STRING + 
+												DRX_STRING + DRY_STRING + DRZ_STRING + ",),");
+			counter += 1;
+
+		counter = 260;
+
+		#The second loop will cause the formation of the AFFE_CHAR_MECA string with the imposed displacements
+		while (counter < (261)):
+
+			if (varDX == 1):
+				DX_STRING = ", DX=0.0";
+			if (varDY == 1):
+				DY_STRING = ", DY=0.0";
+			if (varDZ == 1):
+				DZ_STRING = ", DZ=0.0";
+
+			if (varDRX == 1):
+				DRX_STRING = ", DRX=0.0";
+			if (varDRY == 1):
+				DRY_STRING = ", DRY=0.0";
+			if (varDRZ == 1):
+				DRZ_STRING = ", DRZ=0.0";
+
+			AFM_STRING2 = AFM_STRING2 + "_F(NOEUD=nodes[" + repr(counter) + "]" + (DX_STRING + DY_STRING + DZ_STRING + 
+												DRX_STRING + DRY_STRING + DRZ_STRING + ",),");
+			counter += 1;
+
+		AFM_STRING4 = AFM_STRING1 + AFM_STRING2 + AFM_STRING3;
+
+		#Execute the boundary conditions string
+		exec AFM_STRING4;
+
+		#Compute the linear set of equations
+		RESU=MECA_STATIQUE(MODELE=MOD2, CHAM_MATER=APPLYMA2, EXCIT=_F(CHARGE=FIX1,),);
+
+		#Print out the displacement results
+		IMPR_RESU(FORMAT='RESULTAT', UNITE=12, RESU=_F(RESULTAT=RESU, NOM_CHAM=('DEPL')),);
+
+#End of the get_stress_from_depl function
+
+
+
+def get_stress_from_depl_cont(data_x_coor, data_y_coor, data_z_coor, data_dx, data_dy, data_dz, line, 
+				filename, dist_min, nodes, alpha_min, alpha_max, E_min, E_max, nu_min, nu_max, 
+				lambda_min, lambda_max, rho_cp_min, rho_cp_max, data_drx, data_dry, data_drz, 
+				nodeMeshCounter, MESH2, L_INST1, LIS_ARCH, LINST, FUNCT2, modelType):
+			#This function will get called after the second run in order to obtain the displacement fields from the thermal model
+			#And therefore continue the non linear analysis
+
+	from tkFileDialog import askopenfilename;
+	from Tkinter import Tk;		
+
+	#Start a GUI to get the filename and path
+	Tk().withdraw();
+
+	#Import the filename from the dialogbox
+	filename = askopenfilename();
+	startReading = False;
+
+	displResults = open(filename, "r");
+
+	#Create the arrays for the storage of the displacement results
+	deplDX = [];
+	deplDY = [];
+	deplDZ = [];
+
+	deplDRX = [];
+	deplDRY = [];
+	deplDRZ = [];
+
+	counter = 1;
+
+	#Define the mechanical model
+	MOD3=AFFE_MODELE(MAILLAGE=MESH2, AFFE=_F(TOUT='OUI', PHENOMENE='MECANIQUE', MODELISATION=modelType,),);
+	
+	#Apply the material properties and thermal field onto the mechanical model
+	APPLYMA3=AFFE_MATERIAU(MAILLAGE=MESH2, AFFE=_F(TOUT='OUI', MATER=MAT1,),);
+
+	#Create a loop to read each value of the displacement field
+	while True:
+
+		displResultsLine = displResults.readline();
+		displResultsLineArray = displResultsLine.split();
+
+		if (displResultsLine.count('N1') >= 1):
+			startReading = True;
+		
+		if (counter >= (nodeMeshCounter - 10)): #When the end of the nodes list is reached, the loop should be broken.
+			break;
+
+		if (startReading == True):
+
+			columnCounter = 1;
+			
+			if (varDX == 1) and is_numeric(displResultsLineArray[columnCounter]):
+				deplDX.append(displResultsLineArray[columnCounter]);
+				columnCounter += 1;				
+			if (varDY == 1) and is_numeric(displResultsLineArray[columnCounter]):
+				deplDY.append(displResultsLineArray[columnCounter]);
+				columnCounter += 1;
+			if (varDZ == 1) and is_numeric(displResultsLineArray[columnCounter]):
+				deplDZ.append(displResultsLineArray[columnCounter]);
+				columnCounter += 1;
+
+			if (varDRX == 1) and is_numeric(displResultsLineArray[columnCounter]):
+				deplDRX.append(displResultsLineArray[columnCounter]);
+				columnCounter += 1;				
+			if (varDRY == 1) and is_numeric(displResultsLineArray[columnCounter]):
+				deplDRY.append(displResultsLineArray[columnCounter]);
+				columnCounter += 1;
+			if (varDRZ == 1) and is_numeric(displResultsLineArray[columnCounter]):
+				deplDRZ.append(displResultsLineArray[columnCounter]);
+				columnCounter += 1;
+			
+			print "COUNTER TEST: " + repr(counter);
+
+			counter += 1;
+
+	AFM_STRING1 = "FIX3=AFFE_CHAR_MECA(MODELE=MOD3, DDL_IMPO=(";
+	AFM_STRING2 = "";
+	AFM_STRING3 = "),);";
+
+	DX_STRING = "";
+	DY_STRING = "";
+	DZ_STRING = "";
+
+	DRX_STRING = "";
+	DRY_STRING = "";
+	DRZ_STRING = "";
+
+	counter = 0;
+
+	#The second loop will cause the formation of the AFFE_CHAR_MECA string with the imposed displacements
+	while (counter < (nodeMeshCounter - 11)):
+
+		if (varDX == 1):
+			DX1 = format(float(deplDX[counter]), '.10f');
+			DX_STRING = ", DX=" + DX1;
+		if (varDY == 1):
+			DY1 = format(float(deplDY[counter]), '.10f');
+			DY_STRING = ", DY=" + DY1;
+		if (varDZ == 1):
+			DZ1 = format(float(deplDZ[counter]), '.10f');
+			DZ_STRING = ", DZ=" + DZ1;
+
+		if (varDRX == 1):
+			DRX1 = format(float(deplDRX[counter]), '.10f');
+			DRX_STRING = ", DRX=" + DRX1;
+		if (varDRY == 1):
+			DRY1 = format(float(deplDRY[counter]), '.10f');
+			DRY_STRING = ", DRY=" + DRY1;
+		if (varDRZ == 1):
+			DRZ1 = format(float(deplDRZ[counter]), '.10f');
+			DRZ_STRING = ", DRZ=" + DRZ1;
+
+		AFM_STRING2 = AFM_STRING2 + "_F(NOEUD=nodes[" + repr(counter) + "]" + (DX_STRING + DY_STRING + DZ_STRING + 
+											DRX_STRING + DRY_STRING + DRZ_STRING + ",),");
+
+		counter += 1;
+	
+	AFM_STRING4 = AFM_STRING1 + AFM_STRING2 + AFM_STRING3;
+
+	print "Executing AFM_STRING4";
+
+	exec AFM_STRING4;
+
+	#If the user has specified a time scale for the experiment to be performed, than the operator U_STAT_NON_LINE is used
+	#In this case each instance of the simulation equals 1 second
+	#If no time has been specified, than the program will continue with the regular MECANIQUE STATIQUE calculation
+	if (simulation_time_given):
+		#Perform the calculation
+		RESU3=STAT_NON_LINE(MODELE=MOD3,
+			CHAM_MATER=APPLYMA3,
+			EXCIT=_F(CHARGE=FIX3, FONC_MULT=FUNCT2,),
+			INCREMENT=_F(LIST_INST=LINST),
+			CONVERGENCE = _F(RESI_GLOB_RELA=1.E-6,
+			ITER_GLOB_MAXI=20,),
+			COMP_ELAS=_F(RELATION='ELAS',),
+			SOLVEUR    = _F(METHODE = 'MUMPS'),
+			NEWTON     = _F(MATRICE = 'TANGENTE', REAC_ITER=1),
+			ARCHIVAGE=_F(LIST_INST=LIS_ARCH),);
+
+	else:
+		#Calculate the resolved model
+		RESU3=MECA_STATIQUE(MODELE=MOD3, CHAM_MATER=APPLYMA3, EXCIT=_F(CHARGE=FIX3),);
+
+	#Calculate the field of the nodal stresses
+	RESU3=CALC_CHAMP(reuse=RESU3, MODELE=MOD3, RESULTAT=RESU3, CONTRAINTE='SIGM_NOEU',);
+
+	IMPR_RESU(FORMAT='MED', UNITE=80, RESU=_F(RESULTAT=RESU3, NOM_CHAM=('SIGM_NOEU','DEPL'), ),);	
+	IMPR_RESU(FORMAT='RESULTAT', UNITE=8, RESU=_F(RESULTAT=RESU3,),);
+#End of the get_stress_from_depl_cont function
+
+
+
+def experimental_model(data_x_coor, data_y_coor, data_z_coor, data_dx, data_dy, data_dz, line, 
+				filename, dist_min, nodes, alpha_min, alpha_max, E_min, E_max, nu_min, nu_max, 
+				lambda_min, lambda_max, rho_cp_min, rho_cp_max, data_drx, data_dry, data_drz,
+				L_INST1, LIS_ARCH, LINST, FUNCT2, modelType):
+	#In this function we will define the mechanical model that will allow us to convert the experimental data into a displacement field of the mesh, 
+	#this will allow us to calculate the stresses caused by these displacements
+	
+	print "Starting the experimental_model function..........."
+
+	counter = 0;
+	counter2 = 0;
+	distCalc = 0;
+	assignCounter = 0; #This assignment counter will be used to calculate the average displacement values for each node
+	assignCounter2 = 0;
+	nodeCounter = 0; #This counter will keep track of the number of values that have been awarded to the node_x/node_y arrays
+
+	node_dx = [];
+	node_dy = [];
+	node_dz = [];
+
+	node_drx = [];
+	node_dry = [];
+	node_drz = [];
+	
+	tmp_displacement_dx = 0;
+	tmp_displacement_dy = 0;
+	tmp_displacement_dz = 0;
+	
+	tmp_displacement_drx = 0;
+	tmp_displacement_dry = 0;
+	tmp_displacement_drz = 0;
+
+	tmp_dx = 0;
+	tmp_dy = 0;
+	tmp_dz = 0;
+	
+	tmp_drx = 0;
+	tmp_dry = 0;
+	tmp_drz = 0;
+
+	dist_min = 0.05;
+
+	#Determine the type of model to be computed
+	#Read the mesh
+	MESH4=LIRE_MAILLAGE(FORMAT='MED', INFO=2,);
+
+	#Define the mechanical model
+	MOD4=AFFE_MODELE(MAILLAGE=MESH4, AFFE=_F(TOUT='OUI', PHENOMENE='MECANIQUE', MODELISATION=modelType,),);
+
+	#Define the material characteristics
+	MAT4=DEFI_MATERIAU(ELAS=_F(E=E_max, NU=nu_max, ALPHA=alpha_max,), THER=_F(LAMBDA=lambda_max, RHO_CP=rho_cp_max,),);
+	
+	#Apply the material characteristics
+	APPLYMA4=AFFE_MATERIAU(MAILLAGE=MESH4, AFFE=_F(TOUT='OUI', MATER=MAT4,),);
+
+	#Call the function that will extract the X, Y coordinates from the newly created results file.
+	nodename, nodes_x, nodes_y, nodes_z, nodeMeshCounter = get_node_coordinates(line, filename); #Node n = N(n - 1)
+	
+	#Run a loop in where the displacement values of each node are assigned by the nearest experimental data point, use a nested loop
+	print "distCalcNodePoint";
+	
+	while (counter < (nodeMeshCounter - 1)):
+		
+		counter2 = 0;
+
+		while (counter2 < line):	
+			
+			if (varX == 1):
+				dx = math.fabs(float(nodes_x[counter]) - float(data_x_coor[counter2]));
+			if (varY == 1):
+				dy = math.fabs(float(nodes_y[counter]) - float(data_y_coor[counter2]));
+			if (varZ == 1):
+				dz = math.fabs(float(nodes_z[counter]) - float(data_z_coor[counter2]));
+
+			if ((varDX == 1) and varDY == 1 and varDZ == 0):
+
+				if ((dx <= dist_min) and (dy <= dist_min)):
+					#Assign the displacement values to the node
+					tmp_displacement_dx = float(tmp_displacement_dx) + float(data_dx[counter2]);
+					tmp_displacement_dy = float(tmp_displacement_dy) + float(data_dy[counter2]);
+				
+					assignCounter = assignCounter + 1;
+					nodeCounter = nodeCounter + 1;
+
+			elif ((varDX == 1) and varDY == 1 and varDZ == 1):
+
+				if ((dx <= dist_min) and (dy <= dist_min) and (dz <= dist_min)):
+					#Assign the displacement values to the node
+					tmp_displacement_dx = float(tmp_displacement_dx) + float(data_dx[counter2]);
+					tmp_displacement_dy = float(tmp_displacement_dy) + float(data_dy[counter2]);
+					tmp_displacement_dz = float(tmp_displacement_dz) + float(data_dz[counter2]);
+
+					assignCounter = assignCounter + 1;
+					nodeCounter = nodeCounter + 1;
+
+			elif ((varDX == 1) and varDY == 0 and varDZ == 1):
+
+				if ((dx <= dist_min) and (dz <= dist_min)):
+					#Assign the displacement values to the node
+					tmp_displacement_dx = float(tmp_displacement_dx) + float(data_dx[counter2]);
+					tmp_displacement_dz = float(tmp_displacement_dz) + float(data_dz[counter2]);
+				
+					assignCounter = assignCounter + 1;
+					nodeCounter = nodeCounter + 1;
+
+			elif ((varDX == 0) and varDY == 1 and varDZ == 1):
+
+				if ((dy <= dist_min) and (dz <= dist_min)):
+					#Assign the displacement values to the node
+					tmp_displacement_dy = float(tmp_displacement_dy) + float(data_dy[counter2]);
+					tmp_displacement_dz = float(tmp_displacement_dz) + float(data_dz[counter2]);
+				
+					assignCounter = assignCounter + 1;
+					nodeCounter = nodeCounter + 1;
+
+			#Add the nested if-statements to include the rotational displacements
+ 			if ((varDRX == 1) and varDRY == 1 and varDRZ == 0):
+
+				if ((dx <= dist_min) and (dy <= dist_min)):
+					#Assign the displacement values to the node
+					tmp_displacement_dx = float(tmp_displacement_dx) + float(data_dx[counter2]);
+					tmp_displacement_dy = float(tmp_displacement_dy) + float(data_dy[counter2]);
+				
+					assignCounter = assignCounter + 1;
+					nodeCounter = nodeCounter + 1;
+
+			elif ((varDRX == 1) and varDRY == 1 and varDRZ == 1):
+
+				if ((dx <= dist_min) and (dy <= dist_min) and (dz <= dist_min)):
+					#Assign the displacement values to the node
+					tmp_displacement_drx = float(tmp_displacement_drx) + float(data_drx[counter2]);
+					tmp_displacement_dry = float(tmp_displacement_dry) + float(data_dry[counter2]);
+					tmp_displacement_drz = float(tmp_displacement_drz) + float(data_drz[counter2]);
+
+					assignCounter = assignCounter + 1;
+					nodeCounter = nodeCounter + 1;
+
+			elif ((varDRX == 1) and varDRY == 0 and varDRZ == 1):
+
+				if ((dx <= dist_min) and (dz <= dist_min)):
+					#Assign the displacement values to the node
+					tmp_displacement_drx = float(tmp_displacement_drx) + float(data_drx[counter2]);
+					tmp_displacement_drz = float(tmp_displacement_drz) + float(data_drz[counter2]);
+				
+					assignCounter = assignCounter + 1;
+					nodeCounter = nodeCounter + 1;
+
+			elif ((varDRX == 0) and varDRY == 1 and varDRZ == 1):
+
+				if ((dy <= dist_min) and (dz <= dist_min)):
+					#Assign the displacement values to the node
+					tmp_displacement_dry = float(tmp_displacement_dry) + float(data_dry[counter2]);
+					tmp_displacement_drz = float(tmp_displacement_drz) + float(data_drz[counter2]);
+				
+					assignCounter = assignCounter + 1;
+					nodeCounter = nodeCounter + 1;
+
+			counter2 += 1;
+							
+               #Calculate the average of the assigned values and then include them in the node arrays
+		if (assignCounter <= 0) and (varDX == 1):
+			node_dx.append(0);
+		if (assignCounter <= 0) and (varDY == 1):
+			node_dy.append(0);
+		if (assignCounter <= 0) and (varDZ == 1):
+			node_dz.append(0);
+
+		if (assignCounter <= 0) and (varDRX == 1):
+			node_drx.append(0);
+		if (assignCounter <= 0) and (varDRY == 1):
+			node_dry.append(0);
+		if (assignCounter <= 0) and (varDRZ == 1):
+			node_drz.append(0);
+
+		else:
+			if ((assignCounter != 0) and (varDX == 1)):
+
+				print "TMP DX: " + repr(tmp_displacement_dx);
+				print "ASSIGNCOUNTER: " + repr(assignCounter);
+
+				tmp_dx = (tmp_displacement_dx/(assignCounter));
+				node_dx.append(tmp_dx);
+			if ((assignCounter != 0) and (varDY == 1)):
+				tmp_dy = (tmp_displacement_dy/(assignCounter));
+				node_dy.append(tmp_dy);
+			if ((assignCounter != 0) and (varDZ == 1)):
+				tmp_dz = (tmp_displacement_dz/(assignCounter));
+				node_dz.append(tmp_dz);
+
+			if ((assignCounter != 0) and (varDRX == 1)):
+				tmp_drx = (tmp_displacement_drx/(assignCounter));
+				node_drx.append(tmp_drx);
+			if ((assignCounter != 0) and (varDRY == 1)):
+				tmp_dry = (tmp_displacement_dry/(assignCounter));
+				node_dry.append(tmp_dry);
+			if ((assignCounter != 0) and (varDRZ == 1)):
+				tmp_drz = (tmp_displacement_drz/(assignCounter));
+				node_drz.append(tmp_drz);
+
+		tmp_displacement_dx = 0;
+		tmp_displacement_dy = 0;
+		tmp_displacement_dz = 0;
+
+		tmp_displacement_drx = 0;
+		tmp_displacement_dry = 0;
+		tmp_displacement_drz = 0;
+		
+		tmp_dx = 0;
+		tmp_dy = 0;
+		tmp_dz = 0;
+
+		tmp_drx = 0;
+		tmp_dry = 0;
+		tmp_drz = 0;
+		
+		assignCounter = 0;
+
+		print "COUNTER: " + repr(counter);
+			
+		counter += 1;
+
+	counter = 0;
+	
+	AFM_STRING1 = "FIX4=AFFE_CHAR_MECA(MODELE=MOD4, DDL_IMPO=(";
+	AFM_STRING2 = "";
+	AFM_STRING3 = "),);";
+
+	DX_STRING = "";
+	DY_STRING = "";
+	DZ_STRING = "";
+
+	DRX_STRING = "";
+	DRY_STRING = "";
+	DRZ_STRING = "";
+
+	#The second loop will cause the formation of the AFFE_CHAR_MECA string with the imposed displacements
+	while (counter < (nodeMeshCounter - 1)):
+
+		if (varDX == 1):
+			DX_STRING = ", DX=" + repr(node_dx[counter]);
+		if (varDY == 1):
+			DY_STRING = ", DY=" + repr(node_dy[counter]);
+		if (varDZ == 1):
+			DZ_STRING = ", DZ=" + repr(node_dz[counter]);
+
+		if (varDRX == 1):
+			DRX_STRING = ", DRX=" + repr(node_drx[counter]);
+		if (varDRY == 1):
+			DRY_STRING = ", DRY=" + repr(node_dry[counter]);
+		if (varDRZ == 1):
+			DRZ_STRING = ", DRZ=" + repr(node_drz[counter]);
+
+		AFM_STRING2 = AFM_STRING2 + "_F(NOEUD=nodename[" + repr(counter) + "]" + (DX_STRING + DY_STRING + DZ_STRING + 
+											DRX_STRING + DRY_STRING + DRZ_STRING + ",),");
+
+		print "Node:	" + nodename[counter];
+		print "DX:	" + repr(node_dx[counter]);
+		print "DY:	" + repr(node_dy[counter]);
+
+		counter += 1;
+		
+	#Assemble the complete string to be executed
+	AFM_STRING4 = AFM_STRING1 + AFM_STRING2 + AFM_STRING3;
+
+	#Execute the assembled string
+	exec AFM_STRING4;
+
+	#If the user has specified a time scale for the experiment to be performed, than the operator U_STAT_NON_LINE is used
+	#In this case each instance of the simulation equals 1 second
+	#If no time has been specified, than the program will continue with the regular MECANIQUE STATIQUE calculation
+	if (simulation_time_given):
+		#Perform the calculation
+		RESU4=STAT_NON_LINE(MODELE=MOD4,
+			CHAM_MATER=APPLYMA4,
+			EXCIT=_F(CHARGE=FIX4, FONC_MULT=FUNCT2,),
+			INCREMENT=_F(LIST_INST=LINST),
+			CONVERGENCE = _F(RESI_GLOB_RELA=1.E-6,
+			ITER_GLOB_MAXI=20,),
+			COMP_ELAS=_F(RELATION='ELAS',),
+			SOLVEUR    = _F(METHODE = 'MUMPS'),
+			NEWTON     = _F(MATRICE = 'TANGENTE', REAC_ITER=1),
+			ARCHIVAGE=_F(LIST_INST=LIS_ARCH),);
+	else:
+		#Calculate the resolved model
+		RESU4=MECA_STATIQUE(MODELE=MOD4, CHAM_MATER=APPLYMA4, EXCIT=_F(CHARGE=FIX4,),);
+
+	#Calculate the field of the nodal stresses
+ 	RESU4=CALC_CHAMP(reuse=RESU4, MODELE=MOD4, RESULTAT=RESU4, CONTRAINTE='SIGM_NOEU',);
+
+	#Convert the results into cylindrical coordinates
+	RESUREP4=MODI_REPERE(RESULTAT=RESU4,
+                    MODI_CHAM=_F(
+                                 TYPE_CHAM='TENS_2D',
+                                 NOM_CHAM='SIGM_NOEU',
+                                 NOM_CMP=('SIXX','SIYY','SIZZ','SIXY',),
+                                 #TYPE_CHAM='VECT_2D',
+                                 #NOM_CHAM='DEPL',
+                                 #NOM_CMP=('DX','DY'),
+                                ),
+                    REPERE='CYLINDRIQUE',
+                    AFFE=_F(ORIGINE=(2.5,2.5,0.0,),
+                            AXE_Z=(0.0,0.0,1.0,),),);
+
+	#Finally print out the result of the calculation
+	IMPR_RESU(FORMAT='MED', UNITE=85, RESU=_F(RESULTAT=RESUREP4, NOM_CHAM=('SIGM_NOEU','DEPL'), ),);	
+	IMPR_RESU(FORMAT='RESULTAT', UNITE=10, RESU=_F(RESULTAT=RESU4,),);
+
+	DETRUIRE (CONCEPT = _F (NOM = (FIX4,),),);
+	DETRUIRE (CONCEPT = _F (NOM = (MOD4,),),);
+
+	#Call the rendering function
+	#Thread(target=filter_nodes(nodes_x, nodes_y, nodes_z, node_dx, node_dy, node_dz, 
+	#			node_drx, node_dry, node_drz, nodeMeshCounter, filename, line)).start();
+
+#End of the experimental_model function
+
+
+
+#Call the starting function
+start();
+
+FIN();
+
